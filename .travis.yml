@@ -1,0 +1,23 @@
+language: python
+dist: trusty
+sudo: required
+group: deprecated-2017Q2
+install: true
+script:
+ - test.sh
+addons:
+  apt:
+    packages:
+    - build-essential
+    - realpath
+    - devscripts
+    - python-setuptools
+    - python-all
+    - unzip
+    - debconf
+    - bash
+    - wget
+    - dh-exec
+    - dh-systemd
+    - python-psutil
+    - python-m2crypto
