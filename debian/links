@@ -1,1 +1,1 @@
-etc/kolibri/kolibri.conf etc/nginx/sites-enabled/kolibri.conf
+etc/nginx/sites-available/kolibri.conf etc/nginx/sites-enabled/kolibri.conf
