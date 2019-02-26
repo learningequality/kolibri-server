@@ -24,7 +24,7 @@ location /static {
 }
 "> $DAEMON_HOME/nginx.conf
     do_remove_port
-
+    ln -sf /etc/kolibri/dist/nginx.conf /etc/nginx/conf.d/kolibri.conf
     echo "include $DAEMON_HOME/nginx.conf;" > /etc/kolibri/nginx.d/099-user.conf
 
     db_get kolibri-server/port
