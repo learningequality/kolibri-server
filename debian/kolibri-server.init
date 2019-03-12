@@ -54,6 +54,7 @@ do_start()
 
 	# ensure kolibri application is running:
 	service kolibri start
+	do_check_nginx
 	mkdir -p /var/run/$NAME
 	chown "$KOLIBRI_USER" /var/run/$NAME
 	sleep 15 # ugly hack to avoid race condition when kolibri does vacuum
@@ -81,6 +82,18 @@ do_stop_uwsgi()
 	# Many daemons don't delete their pidfiles when they exit.
 	rm -f $PIDFILE_UWSGI
         return 0
+}
+
+do_check_nginx()
+{
+	systemctl is-active --quiet nginx
+	retval=$?
+	if [ $retval -ne 0  ]; then
+		service kolibri restart
+		service nginx start
+	else
+		service nginx reload
+	fi
 }
 
 do_stop() {

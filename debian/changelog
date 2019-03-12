@@ -1,3 +1,9 @@
+kolibri-server (0.1.1-0ubuntu1) xenial; urgency=medium
+
+  * Backport nginx check from 0.2
+
+ -- José L. Redrejo Rodríguez <jredrejo@debian.org>  Tue, 12 Mar 2019 14:51:06 +0100
+
 kolibri-server (0.1-2) xenial; urgency=low
 
   * Initial release.
