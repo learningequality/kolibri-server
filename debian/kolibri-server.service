@@ -11,7 +11,7 @@ Type=forking
 ExecStart=/etc/init.d/kolibri-server start
 ExecStop=/etc/init.d/kolibri-server stop
 TimeoutStartSec=infinity
-TimeoutStopSec=10
+TimeoutStopSec=90
 KillMode=mixed
 
 [Install]
