@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 . /usr/share/debconf/confmodule
@@ -20,8 +20,26 @@ case "$1" in
     db_get kolibri-server/port
     su $KOLIBRI_USER -c "/usr/share/kolibri-server/kolibri_server_setup.py -d $RET"
     echo "include $DAEMON_HOME/nginx.conf;" > /etc/kolibri/nginx.d/099-user.conf
+
+    # Write logrotate configuration if it's not already written
+    LOGROTATE_CONF="/etc/logrotate.d/kolibri"
+    if [ -e "/etc/logrotate.d" ] # && ! [ -e "$LOGROTATE_CONF" ]
+    then
+      # Issues with string substitution for "\n" caused this pattern
+      echo "\"${DAEMON_HOME}/logs/uwsgi/*.log\" {" > "$LOGROTATE_CONF"
+      echo "  copytruncate" >> "$LOGROTATE_CONF"
+      echo "  daily" >> "$LOGROTATE_CONF"
+      echo "  rotate 5" >> "$LOGROTATE_CONF"
+      echo "  compress" >> "$LOGROTATE_CONF"
+      echo "  delaycompress" >> "$LOGROTATE_CONF"
+      echo "  missingok" >> "$LOGROTATE_CONF"
+      echo "  notifempty" >> "$LOGROTATE_CONF"
+      echo "}" >> "$LOGROTATE_CONF"
+    fi
+
     service nginx reload || true
     ;;
+
   abort-upgrade|abort-remove|abort-deconfigure)
     ;;
 
