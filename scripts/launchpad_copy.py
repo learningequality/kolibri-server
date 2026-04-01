@@ -202,7 +202,7 @@ class LaunchpadWrapper:
 
     def has_published_binaries(self, ppa, name, version, series_name):
         builds = self.get_builds_for(ppa, name, version, series_name)
-        return not builds or builds[0].buildstate == "Successfully built"
+        return bool(builds) and builds[0].buildstate == "Successfully built"
 
     def get_usable_sources(self, ppa, package_names, series_name):
         res = []
@@ -253,8 +253,11 @@ class LaunchpadWrapper:
                     source_names=sorted(names),
                 )
             except lre.BadRequest as e:
-                if "same version already published" in str(e):
+                msg = str(e)
+                if "same version already published" in msg:
                     log.info("Already copied to %s — skipping", target_series)
+                elif "has no binaries to be copied" in msg:
+                    log.warning("Binaries not yet published — skipping copy to %s", target_series)
                 else:
                     raise
 
