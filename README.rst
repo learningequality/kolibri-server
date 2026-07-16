@@ -1,3 +1,6 @@
+This repository has been archived! The Debian server package has been moved to the `Kolibri monorepo <https://github.com/learningequality/kolibri/tree/develop/platforms/debian-server>`__
+==========================================================================================================================================================================================
+
 Kolibri server installer source for Debian
 ==========================================
 
