@@ -1,0 +1,111 @@
+name: Deploy GitHub Pages
+on:
+  workflow_dispatch:
+    inputs:
+      deb-url:
+        description: 'URL to download a .deb file to add to the GitHub Pages repository'
+        required: true
+jobs:
+  deploy:
+    name: Add a .deb to the GitHub Pages repository
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: github-pages-deploy
+      cancel-in-progress: false
+    env:
+      SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+    steps:
+      - name: Install reprepro
+        run: sudo apt-get update && sudo apt-get install -y reprepro
+      - name: Import GPG signing key into isolated keyring
+        env:
+          DEBIAN_REPO_SIGNING_KEY: ${{ secrets.DEBIAN_REPO_SIGNING_KEY }}
+        run: |
+          GNUPGHOME=$(mktemp -d)
+          export GNUPGHOME
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "pinentry-mode loopback" > "$GNUPGHOME/gpg.conf"
+          echo "allow-loopback-pinentry" > "$GNUPGHOME/gpg-agent.conf"
+          echo "$DEBIAN_REPO_SIGNING_KEY" | gpg --batch --import
+          GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ {print $10; exit}')
+          echo "$GPG_KEY_ID:6:" | gpg --batch --import-ownertrust
+          gpgconf --kill gpg-agent
+          echo "GPG_KEY_ID=$GPG_KEY_ID" >> "$GITHUB_ENV"
+          gpg --export "$GPG_KEY_ID" > "$RUNNER_TEMP/signing-key.gpg"
+      # Primes an apt client the way a straggler's is, so the post-deploy check
+      # sees any change apt would refuse.
+      - name: Record the packages the live site serves
+        run: |
+          APT_DIR="$RUNNER_TEMP/apt"
+          mkdir -p "$APT_DIR/lists/partial" "$APT_DIR/cache" "$APT_DIR/sources.list.d"
+          touch "$APT_DIR/status"
+          echo "deb [signed-by=$RUNNER_TEMP/signing-key.gpg] $SITE_URL/ stable main" > "$APT_DIR/sources.list"
+          cat > "$APT_DIR/apt.conf" <<EOF
+          Dir::Etc::SourceList "$APT_DIR/sources.list";
+          Dir::Etc::SourceParts "$APT_DIR/sources.list.d";
+          Dir::State::Lists "$APT_DIR/lists";
+          Dir::State::status "$APT_DIR/status";
+          Dir::Cache "$APT_DIR/cache";
+          EOF
+          echo "APT_CONF=$APT_DIR/apt.conf" >> "$GITHUB_ENV"
+          apt-get -c "$APT_DIR/apt.conf" update --error-on=any || {
+            echo "::error::$SITE_URL does not verify with $GPG_KEY_ID, the key in DEBIAN_REPO_SIGNING_KEY"
+            exit 1
+          }
+          apt-cache -c "$APT_DIR/apt.conf" dumpavail | awk '/^Package:/ {print $2}' | sort -u > "$RUNNER_TEMP/served-before"
+          cat "$RUNNER_TEMP/served-before"
+      - name: Download .deb from URL
+        env:
+          DEB_URL: ${{ inputs.deb-url }}
+        run: |
+          mkdir -p incoming
+          wget -P incoming/ "$DEB_URL"
+      # The live site is the only copy of what stragglers are served.
+      - name: Mirror the live site and add the .deb
+        run: |
+          mkdir -p repo/conf
+          cat > repo/conf/distributions <<EOF
+          Origin: Learning Equality
+          Label: Kolibri Server
+          Suite: stable
+          Codename: stable
+          Architectures: amd64 i386 arm64 armhf
+          Components: main
+          Description: Kolibri Server Debian repository
+          SignWith: $GPG_KEY_ID
+          Update: live
+          EOF
+          # VerifyRelease takes a long key id; reprepro rejects a fingerprint.
+          cat > repo/conf/updates <<EOF
+          Name: live
+          Method: $SITE_URL
+          Suite: stable
+          VerifyRelease: ${GPG_KEY_ID: -16}
+          EOF
+          reprepro -b repo update stable
+          reprepro -b repo includedeb stable incoming/*.deb
+          gpg --armor --export "$GPG_KEY_ID" > repo/pubkey.asc
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: repo
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5
+      - name: Check the deployed site
+        run: |
+          apt-get -c "$APT_CONF" update --error-on=any
+          # reprepro keeps one version per package, so only names carry over.
+          apt-cache -c "$APT_CONF" dumpavail | awk '/^Package:/ {p=$2; print p} /^Version:/ {print p, $2}' | sort -u > "$RUNNER_TEMP/served-after"
+          { cat "$RUNNER_TEMP/served-before"; echo "$(dpkg-deb -f incoming/*.deb Package) $(dpkg-deb -f incoming/*.deb Version)"; } | sort -u > "$RUNNER_TEMP/expected"
+          MISSING=$(comm -23 "$RUNNER_TEMP/expected" "$RUNNER_TEMP/served-after")
+          if [ -n "$MISSING" ]; then
+            echo "::error::$SITE_URL does not serve: $MISSING"
+            exit 1
+          fi
